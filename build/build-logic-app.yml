@@ -1,0 +1,42 @@
+parameters:
+  - name: sourceCodeDirectory
+    displayName: path to the application source code
+    type: string
+  - name: artifactName
+    displayName: Name of the artifact to publish
+    type: string
+  - name: nodejsVersion
+    displayName: Version on node js to use
+    type: string
+
+steps:
+  # TODO installing node here is a quickfix THAT NEEDS TO BE FIXED by adding a flag and installing it only when really needed
+  - task: NodeTool@0
+    displayName: "Install node.js ${{ parameters.nodejsVersion }}"
+    inputs:
+      versionSpec: ${{ parameters.nodejsVersion }}
+  - task: CopyFiles@2
+    displayName: "Create logic apps folder"
+    inputs:
+      SourceFolder: '$(System.DefaultWorkingDirectory)'
+      Contents: |
+        ${{ parameters.sourceCodeDirectory }}/**
+      TargetFolder: "logic_output"
+
+  - task: ArchiveFiles@2
+    displayName: 'Create logic apps zip'
+    inputs:
+      rootFolderOrFile: '$(System.DefaultWorkingDirectory)/logic_output/${{ parameters.sourceCodeDirectory }}'
+      includeRootFolder: false
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.artifactName }}.zip'
+      replaceExistingArchive: true
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish logic apps zip artifact'
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)/${{ parameters.artifactName }}.zip'
+      artifact: '${{ parameters.artifactName }}'
+      publishLocation: 'pipeline'
+
+  

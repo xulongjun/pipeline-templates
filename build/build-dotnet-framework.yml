@@ -1,0 +1,46 @@
+parameters:
+  - name: sourceCodeDirectory
+    displayName: path to the application source code
+    type: string
+  - name: artifactName
+    displayName: Name of the artifact to publish
+    type: string
+  - name: buildConfiguration
+    displayName: Name of the build configuration to use
+    type: string
+  - name: hasSqlFiles
+    displayName: Has sql files to copy in the artifact
+    type: boolean
+    default: true
+
+steps:
+  - task: NuGetToolInstaller@1
+    displayName: 'Install NuGet'
+    inputs:
+      versionSpec: '6.7.0'
+  - task: NuGetCommand@2
+    displayName: 'NuGet restore'
+    inputs:
+      restoreSolution: '**/*.sln'
+      feedsToUse: 'select'
+      vstsFeed: '5efff696-bd42-4aed-adc8-0ae9e397d87c/bc2f96b7-6359-4e18-96ad-5cfabb230c61'
+
+  - task: VSBuild@1
+    displayName: 'Build solution'
+    inputs:
+      solution: '**/*.sln'
+      platform: 'any cpu'
+      msbuildArgs: '/p:OutputPath=$(build.artifactStagingDirectory)/output'
+      configuration: '${{variables.buildConfiguration}}'
+
+  - task: ArchiveFiles@2
+    inputs:
+      rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/output/_PublishedWebsites' # string. Required. Root folder or file to archive. Default: $(Build.BinariesDirectory).
+      includeRootFolder: false # boolean. Prepend root folder name to archive paths. Default: true.
+      archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip' # string. Required. Archive file to create. Default: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip.
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish package'
+    inputs:
+      pathtoPublish: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+      artifactName: ${{ parameters.artifactName }}

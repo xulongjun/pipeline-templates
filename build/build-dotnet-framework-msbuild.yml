@@ -1,0 +1,56 @@
+parameters:
+  - name: sourceCodeDirectory
+    displayName: path to the application source code
+    type: string
+  - name: solutionName
+    displayName: name of solution
+    type: string
+  - name: artifactName
+    displayName: Name of the artifact to publish
+    type: string
+  - name: buildConfiguration
+    displayName: Name of the build configuration to use
+    type: string
+  - name: hasSqlFiles
+    displayName: Has sql files to copy in the artifact
+    type: boolean
+    default: true
+
+steps:
+  - task: NuGetToolInstaller@1
+    displayName: "Install NuGet"
+    inputs:
+      versionSpec: "5.0.0"
+  - task: NuGetCommand@2
+    displayName: "NuGet restore"
+    inputs:
+      restoreSolution: "**/*.sln"
+      feedsToUse: "select"
+      vstsFeed: "5efff696-bd42-4aed-adc8-0ae9e397d87c/bc2f96b7-6359-4e18-96ad-5cfabb230c61"
+
+  - task: DotNetCoreCLI@2
+    displayName: "dotnet msbuild"
+    inputs:
+      command: custom
+      custom: msbuild
+      arguments: '.\${{parameters.sourceCodeDirectory}}\${{ parameters.solutionName }}.sln -t:Rebuild /p:WebPublishMethod=FileSystem -p:Configuration=${{parameters.buildConfiguration}} /property:Platform="Any CPU" /p:LastUsedPlatform="Any CPU" /p:OutputPath=$(build.artifactStagingDirectory)/bin'
+
+  - ${{ if eq(parameters.hasSqlFiles, true) }}:
+      - task: CopyFiles@2
+        displayName: "Copy Sql files"
+        inputs:
+          sourceFolder: "${{ parameters.sourceCodeDirectory }}/sql"
+          targetFolder: "$(Build.ArtifactStagingDirectory)/${{ parameters.sourceCodeDirectory }}/webapp"
+
+  - task: ArchiveFiles@2
+    displayName: 'Archive binaries'
+    inputs:
+      rootFolderOrFile: '$(build.artifactStagingDirectory)/bin'
+      includeRootFolder: false
+      archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.sourceCodeDirectory }}/${{ parameters.solutionName }}.zip'
+
+  - task: PublishBuildArtifacts@1
+    displayName: "Publish package"
+    inputs:
+      pathtoPublish: "$(Build.ArtifactStagingDirectory)/${{ parameters.sourceCodeDirectory }}"
+      artifactName: ${{ parameters.artifactName }}

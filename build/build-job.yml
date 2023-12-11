@@ -1,0 +1,21 @@
+parameters:
+  - name: sourceCodeDirectory
+    displayName: path to the application source code
+    type: string
+  - name: customTasks
+    displayName: custom tasks
+    type: object
+    default: []
+
+steps:
+  - script: |
+      echo $(Build.SourcesDirectory)
+    displayName: "debug"
+  - ${{ each customTask in parameters.customTasks }}:
+    - template: ${{customTask}}
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish package'
+    inputs:
+      pathtoPublish: '$(Build.SourcesDirectory)/${{ parameters.sourceCodeDirectory }}'
+      artifactName: 'job'
