@@ -1,0 +1,20 @@
+parameters:
+  - name: sourceCodeDirectory
+    displayName: path to the application source code
+    type: string
+  - name: artifactName
+    displayName: Name of the artifact to publish
+    type: string
+  - name: dotnetCoreVersion
+    displayName: Dotnet Core version to use
+    type: string
+  - name: buildConfiguration
+    displayName: Name of the build configuration to use
+    type: string
+  - name: nodejsVersion
+    displayName: Version on node js to use
+    type: string
+  - name: hasSqlFiles
+    displayName: Has sql files to copy in the artifact
+    type: boolean
+    default: true
