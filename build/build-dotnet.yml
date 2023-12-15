@@ -2,6 +2,9 @@ parameters:
   - name: sourceCodeDirectory
     displayName: path to the application source code
     type: string
+  - name: testsCodeDirectory
+    displayName: path to the application tests code
+    type: string
   - name: artifactName
     displayName: Name of the artifact to publish
     type: string
@@ -11,31 +14,12 @@ parameters:
   - name: buildConfiguration
     displayName: Name of the build configuration to use
     type: string
-  - name: nodejsVersion
-    displayName: Version on node js to use
-    type: string
-  - name: hasSqlFiles
-    displayName: Has sql files to copy in the artifact
-    type: boolean
-    default: true
 
 steps:
-  # TODO installing node here is a quickfix THAT NEEDS TO BE FIXED by adding a flag and installing it only when really needed
-  - task: NodeTool@0
-    displayName: 'Install node.js ${{ parameters.nodejsVersion }}'
-    inputs:
-      versionSpec: ${{ parameters.nodejsVersion }}
   - task: UseDotNet@2
     displayName: 'Install dotnet core ${{ parameters.dotnetCoreVersion }}'
     inputs:
       version: ${{ parameters.dotnetCoreVersion }}
-  - task: DotNetCoreCLI@2
-    displayName: 'Restore dependencies'
-    inputs:
-      command: 'restore'
-      feedsToUse: 'select'
-      vstsFeed: '5efff696-bd42-4aed-adc8-0ae9e397d87c/bc2f96b7-6359-4e18-96ad-5cfabb230c61'
-      projects: '${{ parameters.sourceCodeDirectory }}/**/*.csproj'
   - task: DotNetCoreCLI@2
     displayName: 'Build with configuration "${{ parameters.buildConfiguration }}"'
     inputs:
@@ -46,37 +30,31 @@ steps:
     displayName: 'Test'
     inputs:
       command: test
-      projects: '${{ parameters.sourceCodeDirectory }}/**/*.Test*.csproj'
+      projects: '${{ parameters.testsCodeDirectory }}/**/*.Test*.csproj'
       arguments: '--configuration ${{ parameters.buildConfiguration }} --collect "XPlat Code Coverage"'
-  # - script: 'dotnet tool update --ignore-failed-sources --global dotnet-reportgenerator-globaltool'  
-  #   displayName: 'Install ReportGenerator tool'
-  # - script: 'reportgenerator -reports:$(Agent.TempDirectory)/**/coverage.cobertura.xml -targetdir:$(Build.SourcesDirectory)/coverlet/reports -reporttypes:"Cobertura;Badges" -assemblyfilters:"-*.DataAccess;-*.Api;-*.Test*;-*.Repository;-*.Model;"'
-  #   displayName: 'Create reports'
+  - script: 'dotnet tool update --ignore-failed-sources --global dotnet-reportgenerator-globaltool'  
+    displayName: 'Install ReportGenerator tool'
+  - script: 'reportgenerator -reports:$(Agent.TempDirectory)/**/coverage.cobertura.xml -targetdir:$(Build.SourcesDirectory)/coverlet/reports -reporttypes:"Cobertura;Badges" -assemblyfilters:"-*.DataAccess;-*.Api;-*.Test*;-*.Repository;-*.Model;"'
+    displayName: 'Create reports'
   - task: PublishCodeCoverageResults@1  
     displayName: 'Publish code coverage'  
     inputs:  
       codeCoverageTool: Cobertura  
       summaryFileLocation: '$(Build.SourcesDirectory)/coverlet/reports/Cobertura.xml'  
-  - ${{ if eq(parameters.hasSqlFiles, true) }}:
-    - task: CopyFiles@2
-      displayName: 'Copy Sql files'
-      inputs:
-        sourceFolder: 'source/sql'
-        targetFolder: '$(Build.ArtifactStagingDirectory)/source/webapp'
-  - task: DotNetCoreCLI@2
-    displayName: 'Create package'
-    inputs:
-      command: publish
-      ${{ if eq(parameters.artifactName, 'webappPackage') }}:
-        publishWebProjects: true
-      ${{ if ne(parameters.artifactName, 'webappPackage') }}:
-        projects: '${{ parameters.sourceCodeDirectory }}/**/*.csproj'
-        publishWebProjects: False
-        modifyOutputPath: True
-      arguments: '--configuration ${{ parameters.buildConfiguration }} --output $(Build.ArtifactStagingDirectory)/${{ parameters.sourceCodeDirectory }}' 
-      zipAfterPublish: True
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publish package'
-    inputs:
-      pathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.sourceCodeDirectory }}'
-      artifactName: ${{ parameters.artifactName }}
+  # - task: DotNetCoreCLI@2
+  #   displayName: 'Create package'
+  #   inputs:
+  #     command: publish
+  #     ${{ if eq(parameters.artifactName, 'webappPackage') }}:
+  #       publishWebProjects: true
+  #     ${{ if ne(parameters.artifactName, 'webappPackage') }}:
+  #       projects: '${{ parameters.sourceCodeDirectory }}/**/*.csproj'
+  #       publishWebProjects: False
+  #       modifyOutputPath: True
+  #     arguments: '--configuration ${{ parameters.buildConfiguration }} --output $(Build.ArtifactStagingDirectory)/${{ parameters.sourceCodeDirectory }}' 
+  #     zipAfterPublish: True
+  # - task: PublishBuildArtifacts@1
+  #   displayName: 'Publish package'
+  #   inputs:
+  #     pathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.sourceCodeDirectory }}'
+  #     artifactName: ${{ parameters.artifactName }}
