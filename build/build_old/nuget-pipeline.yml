@@ -1,0 +1,142 @@
+parameters:
+- name: projectAssemblyInfoName
+  type: string
+- name: platform
+  type: string
+- name: configuration
+  type: string
+- name: nuspecPackagesToPack
+  type: string
+  default: '**/*.csproj'
+
+stages:
+- stage: Versionning
+  jobs:
+    - job: set_version
+      steps:
+        - checkout: self
+          persistCredentials: true
+          clean: true          
+        - task: gitversion/setup@0
+          displayName: "GitVersion"
+          inputs:
+            versionSpec: '5.x'        
+        - task: gitversion/execute@0
+          inputs:
+            useConfigFile: true
+            configFilePath: 'GitVersion.yml' 
+        - task: PowerShell@2
+          displayName: Set the name of the build 
+          inputs:
+            targetType: 'inline'
+            script: |
+              Write-Host "##vso[build.updatebuildnumber]$(GitVersion.SemVer)"                   
+        - task: PowerShell@2
+          displayName: tag git repo
+          condition: and(succeeded(),  eq(variables['Build.SourceBranch'], 'refs/heads/master'))  
+          inputs:
+            workingDirectory: $(Build.SourcesDirectory)     
+            targetType: 'inline'
+            script: |
+              echo "Work on $Env:BUILD_SOURCEBRANCHNAME"
+              echo "git config"
+              git config user.email "CI@labch.onmicrosoft.com"
+              git config user.name "CI"
+              echo git tag $(GitVersion.MajorMinorPatch)
+              git tag "$(GitVersion.MajorMinorPatch)"
+              echo push
+              git push --set-upstream origin $Env:BUILD_SOURCEBRANCHNAME "$(GitVersion.MajorMinorPatch)"
+- stage: Build_Tests
+  jobs:
+    - job: build_develop_master
+      condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/develop'), eq(variables['Build.SourceBranch'], 'refs/heads/master')))
+      pool:
+        name: Hosted VS2017
+        demands:
+        - msbuild
+        - visualstudio
+      steps:          
+        - task: gitversion/setup@0
+          displayName: "GitVersion"
+          inputs:
+            versionSpec: '5.x'        
+        - task: gitversion/execute@0
+          inputs:
+            useConfigFile: true
+            configFilePath: 'GitVersion.yml'  
+            updateAssemblyInfo: true
+            updateAssemblyInfoFilename: '$(Build.SourcesDirectory)\src\${{ parameters.projectAssemblyInfoName}}\Properties\AssemblyInfo.cs'
+        - task: NuGetCommand@2
+          inputs:
+            command: 'restore'
+            restoreSolution: '**/*.sln'
+            feedsToUse: 'select'
+            vstsFeed: ''
+        - task: VSBuild@1
+          inputs:
+            solution: '**\*.sln'
+            msbuildArgs: '/p:ApplicationVersion="$(GitVersion.AssemblySemVer)"'
+            platform: '${{ parameters.platform}}'
+            configuration: '${{ parameters.configuration}}'
+            clean: true
+            restoreNugetPackages: false 
+        - task: VSTest@2
+          displayName: "Test"
+          inputs:
+            solution: '**/*[Tt]ests/*.csproj'
+            platform: '${{ parameters.platform}}'
+            configuration: '${{ parameters.configuration}}'
+            clean: true
+            restoreNugetPackages: false 
+        - task: NuGetCommand@2
+          inputs:
+            command: pack
+            packagesToPack: '${{ parameters.nuspecPackagesToPack}}'
+            versioningScheme: byEnvVar
+            versionEnvVar: 'GitVersion.MajorMinorPatch'
+            configuration: '${{ parameters.configuration}}'
+            packDestination: '$(Build.ArtifactStagingDirectory)'
+        - task: NuGetCommand@2
+          condition: and(succeeded(),  eq(variables['Build.SourceBranch'], 'refs/heads/master'))  
+          inputs:
+            command: 'push'
+            packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;$(Build.ArtifactStagingDirectory)/*.nupkg'
+            nuGetFeedType: 'internal'
+            publishVstsFeed: '5efff696-bd42-4aed-adc8-0ae9e397d87c/bc2f96b7-6359-4e18-96ad-5cfabb230c61'
+    - job: build_other
+      condition: and(succeeded(), ne(variables['Build.SourceBranch'], 'refs/heads/develop'), ne(variables['Build.SourceBranch'], 'refs/heads/master'))
+      pool:
+        name: Hosted VS2017
+        demands:
+        - msbuild
+        - visualstudio
+      steps:          
+        - task: gitversion/setup@0
+          displayName: "GitVersion"
+          inputs:
+            versionSpec: '5.x'        
+        - task: gitversion/execute@0
+          inputs:
+            useConfigFile: true
+            configFilePath: 'GitVersion.yml' 
+        - task: NuGetCommand@2
+          inputs:
+            command: 'restore'
+            restoreSolution: '**/*.sln'
+            feedsToUse: 'select'  
+            vstsFeed: '5efff696-bd42-4aed-adc8-0ae9e397d87c/bc2f96b7-6359-4e18-96ad-5cfabb230c61'  
+        - task: VSBuild@1
+          inputs:
+            solution: '**\*.sln'
+            platform: '${{ parameters.platform}}'
+            configuration: '${{ parameters.configuration}}'
+            clean: true
+            restoreNugetPackages: false 
+        - task: VSTest@2
+          displayName: "Test"
+          inputs:
+            solution: '**/*[Tt]ests/*.csproj'
+            platform: '${{ parameters.platform}}'
+            configuration: '${{ parameters.configuration}}'
+            clean: true
+            restoreNugetPackages: false           
